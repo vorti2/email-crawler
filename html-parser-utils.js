@@ -1,10 +1,10 @@
-var cheerio = require("cheerio");
-var emailregexp = require("./email-regexp");
-var unique = require("array-unique");
+const cheerio = require("cheerio");
+const emailregexp = require("./email-regexp");
+const unique = require("array-unique");
+const _ = require('lodash');
 
 
-
-const LINKS_LIMIT = 20;
+const LINKS_LIMIT = 120;
 
 module.exports = function(htmlStr, domain) {
   var self = this;
@@ -19,9 +19,11 @@ module.exports = function(htmlStr, domain) {
 
       var $ = cheerio.load(htmlStr);
       var navLinks = prepareExtractedLinks($, "nav a");
-      if (navLinks.length === 0) return prepareExtractedLinks($, "a");
-      console.log("using nav links");
-      return navLinks;
+      var normalLinks = prepareExtractedLinks($, "a");
+      var spanLinks = prepareExtractedLinksWithAttribute($, "span", "url");
+      var totalList = _.concat(navLinks, normalLinks, spanLinks);
+     
+      return unique(totalList);
     };
 
     /**
@@ -46,7 +48,26 @@ module.exports = function(htmlStr, domain) {
         if (self.getRootDomain(domain) === self.getRootDomain(linkUrl)) linkQueue.push(linkUrl);
 
       });
-      return unique(linkQueue).slice(0, 10);
+      return unique(linkQueue);
+    }
+
+    function prepareExtractedLinksWithAttribute($, jqSelector, jqAttribute) {
+      var linkQueue = [];
+      var domainNoSlash = (domain[domain.length-1] === "/") ? domain.substring(0, domain.length-1) : domain;
+      $(`${jqSelector}[${jqAttribute}]`).each(function (i, link) {
+        if (i > LINKS_LIMIT)  return false; // break after 10
+        var linkUrl = $(link).attr(jqAttribute);
+        // make sure relative link
+        if (linkUrl == null) return
+        if (linkUrl[0] === '/') {
+          linkQueue.push(domainNoSlash +  linkUrl);
+        }
+        if (linkUrl.indexOf("http:") === -1 && linkUrl.indexOf("https:") === -1 && linkUrl[0] != "/") linkUrl = domainNoSlash + "/"+linkUrl;
+
+        if (self.getRootDomain(domain) === self.getRootDomain(linkUrl)) linkQueue.push(linkUrl);
+
+      });
+      return unique(linkQueue);
     }
 
     function replaceAbsoluteLinkReferences () {
@@ -58,7 +79,12 @@ module.exports = function(htmlStr, domain) {
      */
     this.extractEmails = function () {
       var emails = htmlStr.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+)/gi) || [];
+      // var emails = htmlStr.match(emailregexp) || [];
       return unique(emails);
+    }
+
+    this.extractTitle = function () {
+      return 'test';
     }
 
 
